@@ -1,0 +1,1 @@
+battlesnake play -W 19 -H 19 --name Gold --url http://localhost:8080 -g solo -v
