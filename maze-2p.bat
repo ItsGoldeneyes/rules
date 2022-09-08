@@ -1,0 +1,1 @@
+battlesnake play -W 19 -H 21 -m arcade_maze --name local --url http://localhost:8080 --name hosted --url https://golden-battlesnake.up.railway.app -g solo -v
