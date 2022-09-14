@@ -1,1 +1,0 @@
-battlesnake play -W 10 -H 10 --name local --url http://localhost:8080 --name hosted --url https://golden-battlesnake.up.railway.app -g solo -v

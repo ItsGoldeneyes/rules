@@ -1,1 +1,0 @@
-battlesnake play -W 10 -H 10 -g standard -v --name Snake --url http://localhost:8080 --name Snake2 --url http://localhost:8482 --output C:\Users\adamc\OneDrive\Documents\GitHub\games.txt
