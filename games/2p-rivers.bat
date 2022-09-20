@@ -1,0 +1,1 @@
+battlesnake play -W 11 -H 11 --name local --url http://localhost:8080 --name hosted --url https://battlesnake.up.railway.app/ -g wrapped -m hz_rivers_bridges -v
