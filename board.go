@@ -2,6 +2,9 @@ package rules
 
 import "fmt"
 
+// BoardState represents the internal state of a game board.
+// NOTE: use NewBoardState to construct these to ensure fields are initialized
+// correctly and that tests are resilient to changes to this type.
 type BoardState struct {
 	Turn    int
 	Height  int
@@ -9,15 +12,26 @@ type BoardState struct {
 	Food    []Point
 	Snakes  []Snake
 	Hazards []Point
+
+	// Generic game-level state for maps and rules stages to persist data between turns.
+	GameState map[string]string
+
+	// Numeric state keyed to specific points, also persisted between turns.
+	PointState map[Point]int
 }
 
 type Point struct {
-	X int
-	Y int
+	X     int `json:"X"`
+	Y     int `json:"Y"`
+	TTL   int `json:"TTL,omitempty"`
+	Value int `json:"Value,omitempty"`
 }
 
 // Makes it easier to copy sample points out of Go logs and test failures.
 func (p Point) GoString() string {
+	if p.TTL != 0 || p.Value != 0 {
+		return fmt.Sprintf("{X:%d, Y:%d, TTL:%d, Value:%d}", p.X, p.Y, p.TTL, p.Value)
+	}
 	return fmt.Sprintf("{X:%d, Y:%d}", p.X, p.Y)
 }
 
@@ -33,24 +47,34 @@ type Snake struct {
 // NewBoardState returns an empty but fully initialized BoardState
 func NewBoardState(width, height int) *BoardState {
 	return &BoardState{
-		Turn:    0,
-		Height:  height,
-		Width:   width,
-		Food:    []Point{},
-		Snakes:  []Snake{},
-		Hazards: []Point{},
+		Turn:       0,
+		Height:     height,
+		Width:      width,
+		Food:       []Point{},
+		Snakes:     []Snake{},
+		Hazards:    []Point{},
+		GameState:  map[string]string{},
+		PointState: map[Point]int{},
 	}
 }
 
 // Clone returns a deep copy of prevState that can be safely modified without affecting the original
 func (prevState *BoardState) Clone() *BoardState {
 	nextState := &BoardState{
-		Turn:    prevState.Turn,
-		Height:  prevState.Height,
-		Width:   prevState.Width,
-		Food:    append([]Point{}, prevState.Food...),
-		Snakes:  make([]Snake, len(prevState.Snakes)),
-		Hazards: append([]Point{}, prevState.Hazards...),
+		Turn:       prevState.Turn,
+		Height:     prevState.Height,
+		Width:      prevState.Width,
+		Food:       append([]Point{}, prevState.Food...),
+		Snakes:     make([]Snake, len(prevState.Snakes)),
+		Hazards:    append([]Point{}, prevState.Hazards...),
+		GameState:  make(map[string]string, len(prevState.GameState)),
+		PointState: make(map[Point]int, len(prevState.PointState)),
+	}
+	for key, value := range prevState.GameState {
+		nextState.GameState[key] = value
+	}
+	for key, value := range prevState.PointState {
+		nextState.PointState[key] = value
 	}
 	for i := 0; i < len(prevState.Snakes); i++ {
 		nextState.Snakes[i].ID = prevState.Snakes[i].ID
@@ -61,6 +85,42 @@ func (prevState *BoardState) Clone() *BoardState {
 		nextState.Snakes[i].EliminatedBy = prevState.Snakes[i].EliminatedBy
 	}
 	return nextState
+}
+
+// Builder method to set Turn and return the modified BoardState.
+func (state *BoardState) WithTurn(turn int) *BoardState {
+	state.Turn = turn
+	return state
+}
+
+// Builder method to set Food and return the modified BoardState.
+func (state *BoardState) WithFood(food []Point) *BoardState {
+	state.Food = food
+	return state
+}
+
+// Builder method to set Hazards and return the modified BoardState.
+func (state *BoardState) WithHazards(hazards []Point) *BoardState {
+	state.Hazards = hazards
+	return state
+}
+
+// Builder method to set Snakes and return the modified BoardState.
+func (state *BoardState) WithSnakes(snakes []Snake) *BoardState {
+	state.Snakes = snakes
+	return state
+}
+
+// Builder method to set State and return the modified BoardState.
+func (state *BoardState) WithGameState(gameState map[string]string) *BoardState {
+	state.GameState = gameState
+	return state
+}
+
+// Builder method to set PointState and return the modified BoardState.
+func (state *BoardState) WithPointState(pointState map[Point]int) *BoardState {
+	state.PointState = pointState
+	return state
 }
 
 // CreateDefaultBoardState is a convenience function for fully initializing a
@@ -120,16 +180,16 @@ func PlaceSnakesFixed(rand Rand, b *BoardState, snakeIDs []string) error {
 	// Create start 8 points
 	mn, md, mx := 1, (b.Width-1)/2, b.Width-2
 	cornerPoints := []Point{
-		{mn, mn},
-		{mn, mx},
-		{mx, mn},
-		{mx, mx},
+		{X: mn, Y: mn},
+		{X: mn, Y: mx},
+		{X: mx, Y: mn},
+		{X: mx, Y: mx},
 	}
 	cardinalPoints := []Point{
-		{mn, md},
-		{md, mn},
-		{md, mx},
-		{mx, md},
+		{X: mn, Y: md},
+		{X: md, Y: mn},
+		{X: md, Y: mx},
+		{X: mx, Y: md},
 	}
 
 	// Sanity check
@@ -189,11 +249,11 @@ func PlaceManySnakesDistributed(rand Rand, b *BoardState, snakeIDs []string) err
 	hOffset := quadHSpace / 3
 	vOffset := quadVSpace / 3
 
-	quads := make([]randomPositionBucket, 4)
+	quads := make([]RandomPositionBucket, 4)
 
 	// quad 1
-	quads[0] = randomPositionBucket{}
-	quads[0].fill(
+	quads[0] = RandomPositionBucket{}
+	quads[0].Fill(
 		Point{X: hOffset, Y: vOffset},
 		Point{X: quadHSpace - hOffset, Y: vOffset},
 		Point{X: hOffset, Y: quadVSpace - vOffset},
@@ -201,27 +261,27 @@ func PlaceManySnakesDistributed(rand Rand, b *BoardState, snakeIDs []string) err
 	)
 
 	// quad 2
-	quads[1] = randomPositionBucket{}
+	quads[1] = RandomPositionBucket{}
 	for _, p := range quads[0].positions {
-		quads[1].fill(Point{X: b.Width - p.X - 1, Y: p.Y})
+		quads[1].Fill(Point{X: b.Width - p.X - 1, Y: p.Y})
 	}
 
 	// quad 3
-	quads[2] = randomPositionBucket{}
+	quads[2] = RandomPositionBucket{}
 	for _, p := range quads[0].positions {
-		quads[2].fill(Point{X: p.X, Y: b.Height - p.Y - 1})
+		quads[2].Fill(Point{X: p.X, Y: b.Height - p.Y - 1})
 	}
 
 	// quad 4
-	quads[3] = randomPositionBucket{}
+	quads[3] = RandomPositionBucket{}
 	for _, p := range quads[0].positions {
-		quads[3].fill(Point{X: b.Width - p.X - 1, Y: b.Height - p.Y - 1})
+		quads[3].Fill(Point{X: b.Width - p.X - 1, Y: b.Height - p.Y - 1})
 	}
 
 	currentQuad := rand.Intn(4) // randomly pick a quadrant to start from
 	// evenly distribute snakes across quadrants, randomly, by rotating through the quadrants
 	for i := 0; i < len(b.Snakes); i++ {
-		p, err := quads[currentQuad].take(rand)
+		p, err := quads[currentQuad].Take(rand)
 		if err != nil {
 			return err
 		}
@@ -235,51 +295,15 @@ func PlaceManySnakesDistributed(rand Rand, b *BoardState, snakeIDs []string) err
 	return nil
 }
 
-func PlaceSnakesInQuadrants(rand Rand, b *BoardState, quadrants [][]Point) error {
-
-	if len(quadrants) != 4 {
-		return RulesetError("invalid start point configuration - not divided into quadrants")
-	}
-
-	// make sure all quadrants have the same number of positions
-	for i := 1; i < 4; i++ {
-		if len(quadrants[i]) != len(quadrants[0]) {
-			return RulesetError("invalid start point configuration - quadrants aren't even")
-		}
-	}
-
-	quads := make([]randomPositionBucket, 4)
-	for i := 0; i < 4; i++ {
-		quads[i].fill(quadrants[i]...)
-	}
-
-	currentQuad := rand.Intn(4) // randomly pick a quadrant to start from
-
-	// evenly distribute snakes across quadrants, randomly, by rotating through the quadrants
-	for i := 0; i < len(b.Snakes); i++ {
-		p, err := quads[currentQuad].take(rand)
-		if err != nil {
-			return err
-		}
-		for j := 0; j < SnakeStartSize; j++ {
-			b.Snakes[i].Body = append(b.Snakes[i].Body, p)
-		}
-
-		currentQuad = (currentQuad + 1) % 4
-	}
-
-	return nil
-}
-
-type randomPositionBucket struct {
+type RandomPositionBucket struct {
 	positions []Point
 }
 
-func (rpb *randomPositionBucket) fill(p ...Point) {
+func (rpb *RandomPositionBucket) Fill(p ...Point) {
 	rpb.positions = append(rpb.positions, p...)
 }
 
-func (rpb *randomPositionBucket) take(rand Rand) (Point, error) {
+func (rpb *RandomPositionBucket) Take(rand Rand) (Point, error) {
 	if len(rpb.positions) == 0 {
 		return Point{}, RulesetError("no more positions available")
 	}
@@ -359,8 +383,9 @@ func PlaceFoodAutomatically(rand Rand, b *BoardState) error {
 	return PlaceFoodRandomly(rand, b, len(b.Snakes))
 }
 
+// Deprecated: will be replaced by maps.PlaceFoodFixed
 func PlaceFoodFixed(rand Rand, b *BoardState) error {
-	centerCoord := Point{(b.Width - 1) / 2, (b.Height - 1) / 2}
+	centerCoord := Point{X: (b.Width - 1) / 2, Y: (b.Height - 1) / 2}
 
 	isSmallBoard := b.Width*b.Height < BoardSizeMedium*BoardSizeMedium
 	// Up to 4 snakes can be placed such that food is nearby on small boards.
@@ -370,10 +395,10 @@ func PlaceFoodFixed(rand Rand, b *BoardState) error {
 		for i := 0; i < len(b.Snakes); i++ {
 			snakeHead := b.Snakes[i].Body[0]
 			possibleFoodLocations := []Point{
-				{snakeHead.X - 1, snakeHead.Y - 1},
-				{snakeHead.X - 1, snakeHead.Y + 1},
-				{snakeHead.X + 1, snakeHead.Y - 1},
-				{snakeHead.X + 1, snakeHead.Y + 1},
+				{X: snakeHead.X - 1, Y: snakeHead.Y - 1},
+				{X: snakeHead.X - 1, Y: snakeHead.Y + 1},
+				{X: snakeHead.X + 1, Y: snakeHead.Y - 1},
+				{X: snakeHead.X + 1, Y: snakeHead.Y + 1},
 			}
 
 			// Remove any invalid/unwanted positions
@@ -483,7 +508,7 @@ func GetEvenUnoccupiedPoints(b *BoardState) []Point {
 
 // removeCenterCoord filters out the board's center point from a list of points.
 func removeCenterCoord(b *BoardState, points []Point) []Point {
-	centerCoord := Point{(b.Width - 1) / 2, (b.Height - 1) / 2}
+	centerCoord := Point{X: (b.Width - 1) / 2, Y: (b.Height - 1) / 2}
 	var noCenterPoints []Point
 	for _, p := range points {
 		if p != centerCoord {

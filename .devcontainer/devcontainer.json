@@ -1,0 +1,17 @@
+{
+  "name": "rules.battlesnake.local",
+  "image": "mcr.microsoft.com/devcontainers/go:1.21",
+  "postCreateCommand": "go mod download",
+  "forwardPorts": [],
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "golang.go"
+      ],
+      "settings": {
+        "go.formatTool": "gofmt",
+        "go.lintTool": "golangci-lint"
+      }
+    }
+  }
+}
