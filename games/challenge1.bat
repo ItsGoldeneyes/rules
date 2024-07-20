@@ -1,1 +1,1 @@
-battlesnake play -W 5 -H 5 --name Gold --url http://localhost:8080 -g solo -v
+battlesnake play -W 5 -H 5 --name Gold --url http://localhost:8008 -g solo -v

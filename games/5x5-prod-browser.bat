@@ -1,0 +1,1 @@
+battlesnake play -W 5 -H 5 --name local --url http://localhost:8008 --name hosted --url https://battlesnake.up.railway.app/ -g standard -v --browser

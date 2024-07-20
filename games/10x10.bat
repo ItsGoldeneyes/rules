@@ -1,1 +1,1 @@
-battlesnake play -W 10 -H 10 --name Snake --url http://localhost:8080 -g solo -v
+battlesnake play -W 10 -H 10 --name Snake --url http://localhost:8008 -g solo -v
